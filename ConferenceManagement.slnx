@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="ConferenceManagement.API/ConferenceManagement.API.csproj" />
+  <Project Path="ConferenceManagement.Domain/ConferenceManagement.Domain.csproj" />
+  <Project Path="ConferenceManagement.Infrastructure/ConferenceManagement.Infrastructure.csproj" />
+  <Project Path="ConferenceManagement.Tests/ConferenceManagement.Tests.csproj" Id="48922fdc-3e10-43ae-9ed4-51b04e0c4666" />
+</Solution>
