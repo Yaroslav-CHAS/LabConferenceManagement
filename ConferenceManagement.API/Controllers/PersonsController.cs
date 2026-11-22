@@ -1,11 +1,13 @@
 using ConferenceManagement.Domain.Model;
 using ConferenceManagement.Infrastructure.Repository;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ConferenceManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = AccessRoles.Organizer)]
 public class PersonsController : ControllerBase
 {
     private readonly PersonRepository _repository;
@@ -39,11 +41,18 @@ public class PersonsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Person>> Create(Person person)
     {
+        if (string.IsNullOrWhiteSpace(person.LastName) || string.IsNullOrWhiteSpace(person.FirstName))
+        {
+            return BadRequest("Укажите имя и фамилию.");
+        }
+
         if (person.Id == Guid.Empty)
         {
             person.Id = Guid.NewGuid();
         }
 
+        person.ChairedSections = [];
+        person.SecretarySections = [];
         await _repository.AddAsync(person);
 
         return CreatedAtAction(
@@ -55,6 +64,11 @@ public class PersonsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, Person person)
     {
+        if (string.IsNullOrWhiteSpace(person.LastName) || string.IsNullOrWhiteSpace(person.FirstName))
+        {
+            return BadRequest("Укажите имя и фамилию.");
+        }
+
         var existingPerson = await _repository.GetByIdAsync(id);
 
         if (existingPerson is null)

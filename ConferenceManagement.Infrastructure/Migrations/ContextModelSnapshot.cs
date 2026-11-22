@@ -91,6 +91,9 @@ namespace ConferenceManagement.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("EndTime")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Index")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
@@ -98,6 +101,13 @@ namespace ConferenceManagement.Infrastructure.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Place")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("StartTime")
+                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
@@ -156,6 +166,39 @@ namespace ConferenceManagement.Infrastructure.Migrations
                     b.ToTable("Sections");
                 });
 
+            modelBuilder.Entity("ConferenceManagement.Infrastructure.Data.ConferenceAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsOrganizer")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Login")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("PersonId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Login")
+                        .IsUnique();
+
+                    b.HasIndex("PersonId")
+                        .IsUnique()
+                        .HasFilter("[PersonId] IS NOT NULL");
+
+                    b.ToTable("Accounts");
+                });
+
             modelBuilder.Entity("ConferenceManagement.Domain.Model.ScientificDirection", b =>
                 {
                     b.HasOne("ConferenceManagement.Domain.Model.Conference", "Conference")
@@ -191,6 +234,14 @@ namespace ConferenceManagement.Infrastructure.Migrations
                     b.Navigation("ScientificDirection");
 
                     b.Navigation("Secretary");
+                });
+
+            modelBuilder.Entity("ConferenceManagement.Infrastructure.Data.ConferenceAccount", b =>
+                {
+                    b.HasOne("ConferenceManagement.Domain.Model.Person", null)
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("ConferenceManagement.Domain.Model.Conference", b =>

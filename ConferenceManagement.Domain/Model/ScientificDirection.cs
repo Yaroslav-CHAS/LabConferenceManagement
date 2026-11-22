@@ -10,6 +10,12 @@ public class ScientificDirection
 
     public string Description { get; set; } = string.Empty;
 
+    public string Place { get; set; } = string.Empty;
+
+    public DateTime? StartTime { get; set; }
+
+    public DateTime? EndTime { get; set; }
+
     public Guid ConferenceId { get; set; }
 
     public Conference Conference { get; set; } = null!;

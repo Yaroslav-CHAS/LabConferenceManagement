@@ -1,0 +1,35 @@
+@typeparam TValue
+@inherits InputBase<TValue>
+@using System.Diagnostics.CodeAnalysis
+
+<input type="text" @attributes="AdditionalAttributes" class="@CssClass"
+       placeholder="@(WithTime ? "дд/мм/гггг чч:мм" : "дд/мм/гггг")"
+       maxlength="@(WithTime ? 16 : 10)" required @bind="CurrentValueAsString" />
+
+@code {
+    [Parameter] public bool WithTime { get; set; }
+
+    private string Format => WithTime ? "dd'/'MM'/'yyyy HH:mm" : "dd'/'MM'/'yyyy";
+
+    protected override string? FormatValueAsString(TValue? value) =>
+        value is DateTime date && date != default
+            ? date.ToString(Format, CultureInfo.InvariantCulture)
+            : null;
+
+    protected override bool TryParseValueFromString(string? value, out TValue result,
+        [NotNullWhen(false)] out string? validationErrorMessage)
+    {
+        if (DateTime.TryParseExact(value?.Trim(), Format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+        {
+            result = (TValue)(object)date;
+            validationErrorMessage = null;
+            return true;
+        }
+
+        result = default!;
+        validationErrorMessage = WithTime
+            ? "Введите дату и время в формате дд/мм/гггг чч:мм."
+            : "Введите дату в формате дд/мм/гггг.";
+        return false;
+    }
+}

@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ConferenceManagement.Domain\ConferenceManagement.Domain.csproj" />
+    <ProjectReference Include="..\ConferenceManagement.Front\ConferenceManagement.Front.csproj" />
     <ProjectReference Include="..\ConferenceManagement.Infrastructure\ConferenceManagement.Infrastructure.csproj" />
   </ItemGroup>
 

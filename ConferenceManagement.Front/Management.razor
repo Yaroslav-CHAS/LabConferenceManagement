@@ -1,0 +1,321 @@
+@page "/"
+@inject BrowserApi Api
+
+<header>
+    <h1>Управление секциями конференции</h1>
+    @if (Api.Session.Login is { } login)
+    {
+        <div class="session">
+            <span>@login · @(Api.Session.IsOrganizer ? "Организатор" : "Ответственное лицо")</span>
+            <button type="button" class="secondary" disabled="@_accountBusy" @onclick="LogoutAsync">Выйти</button>
+        </div>
+    }
+</header>
+
+<main>
+    @if (_error is not null)
+    {
+        <p class="error" role="alert">@_error</p>
+    }
+    @if (_notice is not null)
+    {
+        <p role="status">@_notice</p>
+    }
+    @if (!_initialized)
+    {
+        <p role="status">Подключение к серверу…</p>
+    }
+    else
+    {
+        @if (_connectionFailed)
+        {
+            <button type="button" @onclick="InitializeAsync">Повторить подключение</button>
+        }
+        else
+        {
+            @if (Api.Session.Login is null)
+            {
+                <form class="card account" @onsubmit="SignInAsync" @onsubmit:preventDefault>
+                    <h2>@(Api.Session.CanSetUp ? "Создать организатора" : "Вход")</h2>
+                    @if (Api.Session.CanSetUp)
+                    {
+                        <p>Первый запуск. Задайте пароль для логина <strong>organizer</strong>.</p>
+                    }
+                    else
+                    {
+                        <label>Логин <input autocomplete="username" required maxlength="64" @bind="_login" /></label>
+                    }
+                    <label>Пароль <input type="password" autocomplete="@(Api.Session.CanSetUp ? "new-password" : "current-password")"
+                                         required minlength="@(Api.Session.CanSetUp ? 8 : 1)" maxlength="128" @bind="_password" /></label>
+                    <button type="submit" disabled="@_accountBusy">@(Api.Session.CanSetUp ? "Создать и войти" : "Войти")</button>
+                </form>
+            }
+
+            <nav aria-label="Разделы">
+                <button type="button" class="@TabClass("sections")" @onclick='() => Show("sections")'>Секции</button>
+                <button type="button" class="@TabClass("directions")" @onclick='() => Show("directions")'>Направления</button>
+                <button type="button" class="@TabClass("conferences")" @onclick='() => Show("conferences")'>Конференции</button>
+                @if (Api.Session.IsOrganizer)
+                {
+                    <button type="button" class="@TabClass("persons")" @onclick='() => Show("persons")'>Ответственные лица</button>
+                    <button type="button" class="@TabClass("accounts")" @onclick='() => Show("accounts")'>Доступ</button>
+                }
+            </nav>
+
+            @switch (_tab)
+            {
+                case "conferences":
+                    <RecordPanel TItem="Conference" Title="Конференции" ResourcePath="/api/Conferences"
+                                 Id="item => item.Id" Label="item => item.Name" Summary="ConferenceDates"
+                                 CanManage="Api.Session.IsOrganizer" Payload="ConferencePayload"
+                                 DeleteNote="Связанные направления и секции тоже будут удалены." Changed="RefreshChoicesAsync">
+                        <Fields Context="item">
+                            <label>Название <InputText required @bind-Value="item.Name" /></label>
+                            <label>Дата начала <DateField TValue="DateTime" @bind-Value="item.StartDate" /></label>
+                            <label>Дата окончания <DateField TValue="DateTime" @bind-Value="item.EndDate" /></label>
+                        </Fields>
+                        <Details Context="item">
+                            <p>@ConferenceDates(item)</p>
+                            <p>Направления: @string.Join(", ", _directions.Where(x => x.ConferenceId == item.Id).Select(x => x.Name))</p>
+                        </Details>
+                    </RecordPanel>
+                    break;
+                case "directions":
+                    <RecordPanel TItem="ScientificDirection" Title="Научные направления" ResourcePath="/api/ScientificDirections"
+                                 Id="item => item.Id" Label="item => TaggedName(item.Index, item.Name)"
+                                 CanManage="Api.Session.IsOrganizer" Payload="DirectionPayload"
+                                 DeleteNote="Секции этого направления тоже будут удалены." Changed="RefreshChoicesAsync">
+                        <Fields Context="item">
+                            <label>Конференция
+                                <InputSelect @bind-Value="item.ConferenceId">
+                                    <option value="@Guid.Empty">Выберите конференцию</option>
+                                    @foreach (var conference in _conferences) { <option value="@conference.Id">@conference.Name</option> }
+                                </InputSelect>
+                            </label>
+                            <label>Название <InputText required @bind-Value="item.Name" /></label>
+                            <label>Индекс <InputText required @bind-Value="item.Index" /></label>
+                            <label>Описание <InputTextArea @bind-Value="item.Description" /></label>
+                            <label>Место <InputText required @bind-Value="item.Place" /></label>
+                            <label>Начало <DateField TValue="DateTime?" WithTime @bind-Value="item.StartTime" /></label>
+                            <label>Окончание <DateField TValue="DateTime?" WithTime @bind-Value="item.EndTime" /></label>
+                        </Fields>
+                        <Details Context="item">
+                            <p>Конференция: @(_conferences.FirstOrDefault(x => x.Id == item.ConferenceId)?.Name ?? "—")</p>
+                            <p>@item.Description</p>
+                            <p>Место: @(string.IsNullOrWhiteSpace(item.Place) ? "Не указано" : item.Place)</p>
+                            <p>@Schedule(item.StartTime, item.EndTime)</p>
+                            <button type="button" @onclick="() => ShowSections(item.Id)">Показать секции направления</button>
+                        </Details>
+                    </RecordPanel>
+                    break;
+                case "persons":
+                    <RecordPanel TItem="Person" Title="Ответственные лица" ResourcePath="/api/Persons"
+                                 Id="item => item.Id" Label="item => FullName(item)" Summary="item => item.Workplace"
+                                 CanManage="Api.Session.IsOrganizer" Payload="PersonPayload" Changed="RefreshChoicesAsync">
+                        <Fields Context="item">
+                            <label>Фамилия <InputText required @bind-Value="item.LastName" /></label>
+                            <label>Имя <InputText required @bind-Value="item.FirstName" /></label>
+                            <label>Отчество <InputText @bind-Value="item.MiddleName" /></label>
+                            <label>Место работы <InputText @bind-Value="item.Workplace" /></label>
+                            <label>Электронная почта <InputText type="email" @bind-Value="item.Email" /></label>
+                            <label>Телефон <InputText type="tel" @bind-Value="item.Phone" /></label>
+                        </Fields>
+                        <Details Context="item">
+                            <p>@item.Workplace</p>
+                            <p>Почта: @item.Email</p>
+                            <p>Телефон: @item.Phone</p>
+                        </Details>
+                    </RecordPanel>
+                    break;
+                case "accounts":
+                    <form class="card account" @onsubmit="CreateResponsibleAsync" @onsubmit:preventDefault>
+                        <h2>Создать учётную запись ответственного</h2>
+                        <p>Пользователь сможет править расписание и описание секций, где он назначен председателем или секретарём.</p>
+                        <label>Ответственное лицо
+                            <select @bind="_personId">
+                                <option value="@Guid.Empty">Выберите лицо</option>
+                                @foreach (var person in _persons) { <option value="@person.Id">@FullName(person)</option> }
+                            </select>
+                        </label>
+                        <label>Логин <input required pattern="[A-Za-z0-9_.\-]{3,64}" autocomplete="off" @bind="_newLogin" /></label>
+                        <label>Пароль <input type="password" required minlength="8" maxlength="128" autocomplete="new-password" @bind="_newPassword" /></label>
+                        <button type="submit" disabled="@(_accountBusy || _persons.Count == 0)">Создать учётную запись</button>
+                    </form>
+                    break;
+                default:
+                    <label class="filter">Фильтр по направлению
+                        <select @bind="_directionFilter">
+                            <option value="@Guid.Empty">Все направления</option>
+                            @foreach (var direction in _directions)
+                            {
+                                <option value="@direction.Id">@TaggedName(direction.Index, direction.Name)</option>
+                            }
+                        </select>
+                    </label>
+                    <RecordPanel @key="_directionFilter" TItem="Section" Title="Секции" ResourcePath="/api/Sections" ListPath="@SectionListPath"
+                                 Id="item => item.Id" Label="item => TaggedName(item.Index, item.Name)" Summary="SectionSummary"
+                                 CanManage="Api.Session.IsOrganizer" CanEdit="CanEditSection" Payload="SectionPayload">
+                        <Fields Context="item">
+                            @if (Api.Session.IsOrganizer)
+                            {
+                                <label>Направление
+                                    <InputSelect @bind-Value="item.ScientificDirectionId">
+                                        <option value="@Guid.Empty">Выберите направление</option>
+                                        @foreach (var direction in _directions)
+                                        {
+                                            <option value="@direction.Id">@TaggedName(direction.Index, direction.Name)</option>
+                                        }
+                                    </InputSelect>
+                                </label>
+                                <label>Название <InputText required @bind-Value="item.Name" /></label>
+                                <label>Индекс <InputText required @bind-Value="item.Index" /></label>
+                                <label>Председатель
+                                    <InputSelect @bind-Value="item.ChairmanId">
+                                        <option value="@Guid.Empty">Выберите председателя</option>
+                                        @foreach (var person in _persons) { <option value="@person.Id">@FullName(person)</option> }
+                                    </InputSelect>
+                                </label>
+                                <label>Секретарь
+                                    <InputSelect @bind-Value="item.SecretaryId">
+                                        <option value="">Не назначен</option>
+                                        @foreach (var person in _persons) { <option value="@person.Id">@FullName(person)</option> }
+                                    </InputSelect>
+                                </label>
+                            }
+                            <label>Описание <InputTextArea @bind-Value="item.Description" /></label>
+                            <label>Место <InputText required @bind-Value="item.Place" /></label>
+                            <label>Начало <DateField TValue="DateTime" WithTime @bind-Value="item.StartTime" /></label>
+                            <label>Окончание <DateField TValue="DateTime" WithTime @bind-Value="item.EndTime" /></label>
+                        </Fields>
+                        <Details Context="item">
+                            <p>@item.ScientificDirection?.Name</p>
+                            <p>@item.Description</p>
+                            <p>@SectionSummary(item)</p>
+                            <p>Председатель: @Contact(item.Chairman)</p>
+                            <p>Секретарь: @Contact(item.Secretary)</p>
+                        </Details>
+                    </RecordPanel>
+                    break;
+            }
+        }
+    }
+</main>
+
+@code {
+    private List<Conference> _conferences = [];
+    private List<ScientificDirection> _directions = [];
+    private List<Person> _persons = [];
+    private string _tab = "sections", _login = "", _password = "", _newLogin = "", _newPassword = "";
+    private Guid _directionFilter, _personId;
+    private string? _error, _notice;
+    private bool _initialized, _accountBusy, _connectionFailed;
+
+    private string SectionListPath => _directionFilter == Guid.Empty
+        ? "/api/Sections"
+        : $"/api/Sections/direction/{_directionFilter}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task InitializeAsync()
+    {
+        _error = null;
+        _connectionFailed = false;
+        try
+        {
+            await Api.LoadSessionAsync();
+            await RefreshChoicesAsync();
+        }
+        catch (ApiException ex)
+        {
+            _connectionFailed = true;
+            _error = ex.Message;
+        }
+        finally
+        {
+            _initialized = true;
+        }
+    }
+
+    private async Task RefreshChoicesAsync()
+    {
+        _conferences = await Api.GetAsync<List<Conference>>("/api/Conferences");
+        _directions = await Api.GetAsync<List<ScientificDirection>>("/api/ScientificDirections");
+        _persons = Api.Session.IsOrganizer ? await Api.GetAsync<List<Person>>("/api/Persons") : [];
+    }
+
+    private Task SignInAsync() => AccountActionAsync(async () =>
+    {
+        if (Api.Session.CanSetUp)
+            await Api.SaveAsync("POST", "/api/Accounts/setup", new { Password = _password });
+        else
+            await Api.SaveAsync("POST", "/api/Accounts/login", new { Login = _login.Trim(), Password = _password });
+
+        _password = "";
+        await Api.LoadSessionAsync();
+        await RefreshChoicesAsync();
+    });
+
+    private Task LogoutAsync() => AccountActionAsync(async () =>
+    {
+        await Api.SaveAsync("POST", "/api/Accounts/logout");
+        _persons = [];
+        _tab = "sections";
+        await Api.LoadSessionAsync();
+    });
+
+    private Task CreateResponsibleAsync() => AccountActionAsync(async () =>
+    {
+        await Api.SaveAsync("POST", "/api/Accounts/responsible", new
+        {
+            Login = _newLogin.Trim(),
+            Password = _newPassword,
+            PersonId = _personId
+        });
+        _newLogin = _newPassword = "";
+        _personId = Guid.Empty;
+        _notice = "Учётная запись создана.";
+    });
+
+    private async Task AccountActionAsync(Func<Task> action)
+    {
+        _accountBusy = true;
+        _error = _notice = null;
+        try { await action(); }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _accountBusy = false; }
+    }
+
+    private bool CanEditSection(Section section) =>
+        Api.Session.PersonId is Guid id && (section.ChairmanId == id || section.SecretaryId == id);
+
+    private string TabClass(string tab) => _tab == tab ? "selected" : "secondary";
+    private void Show(string tab) { _tab = tab; _notice = _error = null; }
+    private void ShowSections(Guid id) { _directionFilter = id; Show("sections"); }
+
+    private static string TaggedName(string index, string name) => $"{index} · {name}";
+    private static string FullName(Person item) => string.Join(" ", new[] { item.LastName, item.FirstName, item.MiddleName }
+        .Where(x => !string.IsNullOrWhiteSpace(x)));
+    private static string Contact(Person? item) => item is null ? "Не назначен"
+        : string.Join(", ", new[] { FullName(item), item.Email, item.Phone }.Where(x => !string.IsNullOrWhiteSpace(x)));
+    private static string DateText(DateTime date) => date.ToString("dd'/'MM'/'yyyy", CultureInfo.InvariantCulture);
+    private static string DateTimeText(DateTime date) => $"{DateText(date)} {date:HH:mm}";
+    private static string ConferenceDates(Conference item) => $"{DateText(item.StartDate)} — {DateText(item.EndDate)}";
+    private static string Schedule(DateTime? start, DateTime? end) => start is DateTime first && end is DateTime last
+        ? $"{DateTimeText(first)} — {DateTimeText(last)}" : "Время не указано";
+    private static string SectionSummary(Section item) => $"{item.Place} · {Schedule(item.StartTime, item.EndTime)}";
+
+    private static object ConferencePayload(Conference item) => new { item.Name, item.StartDate, item.EndDate };
+    private static object DirectionPayload(ScientificDirection item) =>
+        new { item.Name, item.Index, item.Description, item.Place, item.StartTime, item.EndTime, item.ConferenceId };
+    private static object SectionPayload(Section item) =>
+        new { item.Name, item.Index, item.Description, item.Place, item.StartTime, item.EndTime, item.ScientificDirectionId, item.ChairmanId, item.SecretaryId };
+    private static object PersonPayload(Person item) =>
+        new { item.LastName, item.FirstName, item.MiddleName, item.Workplace, item.Email, item.Phone };
+}

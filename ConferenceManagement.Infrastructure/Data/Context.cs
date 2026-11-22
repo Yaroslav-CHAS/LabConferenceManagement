@@ -18,6 +18,8 @@ public class Context : DbContext
 
     public DbSet<Person> Persons { get; set; }
 
+    public DbSet<ConferenceAccount> Accounts { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -53,5 +55,16 @@ public class Context : DbContext
         modelBuilder.Entity<Section>()
             .HasIndex(x => new { x.ScientificDirectionId, x.Index })
             .IsUnique();
+
+        modelBuilder.Entity<ConferenceAccount>(account =>
+        {
+            account.Property(x => x.Login).HasMaxLength(64);
+            account.HasIndex(x => x.Login).IsUnique();
+            account.HasIndex(x => x.PersonId).IsUnique();
+            account.HasOne<Person>()
+                .WithMany()
+                .HasForeignKey(x => x.PersonId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
     }
 }

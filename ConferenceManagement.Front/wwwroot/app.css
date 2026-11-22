@@ -1,0 +1,29 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #f1f3f5; color: #202a33; font: 1rem/1.5 system-ui, sans-serif; }
+header { background: #263942; color: #fff; padding: 1rem max(1rem, calc((100vw - 74rem) / 2)); }
+h1 { margin: 0; font-size: clamp(1.3rem, 3vw, 1.8rem); }
+main { max-width: 76rem; margin: 0 auto; padding: 1.25rem 1rem; }
+h2 { margin: 0; font-size: 1.25rem; }
+h3 { margin: 0 0 .65rem; font-size: 1.12rem; }
+nav, .actions, .session, .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+nav { margin-bottom: 1rem; }
+.toolbar { justify-content: space-between; margin: .85rem 0; }
+.session { margin-top: .5rem; }
+input, select, textarea, button { font: inherit; border: 1px solid #9ca9b6; border-radius: 4px; padding: .39rem .65rem; }
+input, select, textarea { width: 100%; min-width: 0; background: white; color: inherit; }
+textarea { min-height: 4.5rem; }
+button { background: #164b77; color: #fff; border-color: #164b77; cursor: pointer; }
+button.secondary { background: white; color: #164b77; border-color: #a2afbc; }
+button.danger { background: #a32929; border-color: #a32929; }
+button:disabled { opacity: .55; cursor: default; }
+.card { background: #fff; border: 1px solid #d3dbe2; border-radius: 6px; padding: 1rem; margin-bottom: .8rem; }
+.account { max-width: 34rem; }
+label { display: grid; gap: .22rem; margin: 0 0 .65rem; }
+.filter { max-width: 24rem; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 .75rem; }
+.records { list-style: none; padding: 0; margin: 0; }
+.records li { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem;
+    padding: .7rem .85rem; background: white; border: 1px solid #d3dbe2; margin-bottom: .35rem; border-radius: 4px; }
+.records small { display: block; color: #435662; }
+.error, .validation-message, .validation-errors { color: #932221; }
+@media (max-width: 42rem) { .fields { grid-template-columns: 1fr; } .toolbar { align-items: flex-start; } }

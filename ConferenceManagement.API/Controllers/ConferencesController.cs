@@ -1,11 +1,13 @@
 ﻿using ConferenceManagement.Domain.Model;
 using ConferenceManagement.Infrastructure.Repository;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ConferenceManagement.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = AccessRoles.Organizer)]
 public class ConferencesController : ControllerBase
 {
     private readonly ConferenceRepository _repository;
@@ -16,6 +18,7 @@ public class ConferencesController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous]
     public async Task<ActionResult<List<Conference>>> GetAll()
     {
         var conferences = await _repository.GetAllAsync();
@@ -24,6 +27,7 @@ public class ConferencesController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [AllowAnonymous]
     public async Task<ActionResult<Conference>> GetById(Guid id)
     {
         var conference = await _repository.GetByIdAsync(id);
@@ -39,6 +43,11 @@ public class ConferencesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Conference>> Create(Conference conference)
     {
+        if (string.IsNullOrWhiteSpace(conference.Name) || conference.StartDate == default)
+        {
+            return BadRequest("Укажите название и даты конференции.");
+        }
+
         if (conference.EndDate < conference.StartDate)
         {
             return BadRequest(
@@ -50,6 +59,7 @@ public class ConferencesController : ControllerBase
             conference.Id = Guid.NewGuid();
         }
 
+        conference.Directions = [];
         await _repository.AddAsync(conference);
 
         return CreatedAtAction(
@@ -61,6 +71,11 @@ public class ConferencesController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, Conference conference)
     {
+        if (string.IsNullOrWhiteSpace(conference.Name) || conference.StartDate == default)
+        {
+            return BadRequest("Укажите название и даты конференции.");
+        }
+
         if (conference.EndDate < conference.StartDate)
         {
             return BadRequest(
@@ -75,6 +90,7 @@ public class ConferencesController : ControllerBase
         }
 
         conference.Id = id;
+        conference.Directions = existingConference.Directions;
 
         await _repository.UpdateAsync(conference);
 

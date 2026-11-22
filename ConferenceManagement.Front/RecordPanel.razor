@@ -1,0 +1,206 @@
+@typeparam TItem where TItem : class, new()
+@inject BrowserApi Api
+
+<section>
+    <div class="toolbar">
+        <h2>@Title</h2>
+        <div>
+            <button type="button" class="secondary" disabled="@_busy" @onclick="LoadAsync">Обновить</button>
+            @if (CanManage)
+            {
+                <button type="button" disabled="@_busy" @onclick="Create">Добавить</button>
+            }
+        </div>
+    </div>
+    @if (_error is not null)
+    {
+        <p class="error" role="alert">@_error</p>
+    }
+    @if (_notice is not null)
+    {
+        <p role="status">@_notice</p>
+    }
+    @if (_editing is not null)
+    {
+        <article class="card">
+            <h3>@(_editingId is null ? "Новая запись" : "Редактирование")</h3>
+            <EditForm Model="_editing" OnValidSubmit="SaveAsync" @key="_editing">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="fields">@Fields(_editing)</div>
+                <button type="submit" disabled="@_busy">Сохранить</button>
+                <button type="button" class="secondary" disabled="@_busy" @onclick="Close">Отмена</button>
+            </EditForm>
+        </article>
+    }
+    @if (_selected is not null)
+    {
+        <article class="card">
+            <h3>@Label(_selected)</h3>
+            @Details(_selected)
+            <button type="button" class="secondary" @onclick="Close">Закрыть</button>
+        </article>
+    }
+    @if (_deleting is not null)
+    {
+        <article class="card">
+            <p>Удалить «@Label(_deleting)»? @DeleteNote</p>
+            <button type="button" class="danger" disabled="@_busy" @onclick="DeleteAsync">Да, удалить</button>
+            <button type="button" class="secondary" disabled="@_busy" @onclick="Close">Отмена</button>
+        </article>
+    }
+    @if (!_loaded)
+    {
+        <p role="status">Загрузка…</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <p>Записей пока нет.</p>
+    }
+    else
+    {
+        <ul class="records">
+            @foreach (var item in _items)
+            {
+                <li @key="Id(item)">
+                    <div><strong>@Label(item)</strong>@if (Summary is not null) { <small>@Summary(item)</small> }</div>
+                    <div class="actions">
+                        <button type="button" class="secondary" disabled="@_busy" @onclick="() => OpenAsync(item, false)">Открыть</button>
+                        @if (CanManage || CanEdit(item))
+                        {
+                            <button type="button" class="secondary" disabled="@_busy" @onclick="() => OpenAsync(item, true)">Редактировать</button>
+                        }
+                        @if (CanManage)
+                        {
+                            <button type="button" class="secondary" disabled="@_busy" @onclick="() => AskDelete(item)">Удалить</button>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string ResourcePath { get; set; } = "";
+    [Parameter] public string? ListPath { get; set; }
+    [Parameter, EditorRequired] public Func<TItem, Guid> Id { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<TItem, string> Label { get; set; } = default!;
+    [Parameter] public Func<TItem, string>? Summary { get; set; }
+    [Parameter, EditorRequired] public Func<TItem, object> Payload { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment<TItem> Fields { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment<TItem> Details { get; set; } = default!;
+    [Parameter] public bool CanManage { get; set; }
+    [Parameter] public Func<TItem, bool> CanEdit { get; set; } = _ => false;
+    [Parameter] public string? DeleteNote { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private List<TItem> _items = [];
+    private TItem? _editing, _selected, _deleting;
+    private Guid? _editingId;
+    private string? _error, _notice;
+    private bool _busy, _loaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        await RunAsync(async () => _items = await Api.GetAsync<List<TItem>>(ListPath ?? ResourcePath));
+        _loaded = true;
+    }
+
+    private void Create()
+    {
+        Close();
+        _editing = new TItem();
+        _editingId = null;
+    }
+
+    private async Task OpenAsync(TItem item, bool edit)
+    {
+        Close();
+        await RunAsync(async () =>
+        {
+            var record = await Api.GetAsync<TItem>(ItemPath(Id(item)));
+            if (edit)
+            {
+                _editing = record;
+                _editingId = Id(item);
+            }
+            else
+            {
+                _selected = record;
+            }
+        });
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null) return;
+
+        await RunAsync(async () =>
+        {
+            var update = _editingId is Guid;
+            await Api.SaveAsync(update ? "PUT" : "POST",
+                _editingId is Guid id ? ItemPath(id) : ResourcePath, Payload(_editing));
+            Close();
+            _notice = "Запись сохранена.";
+            _items = await Api.GetAsync<List<TItem>>(ListPath ?? ResourcePath);
+            await Changed.InvokeAsync();
+        });
+    }
+
+    private void AskDelete(TItem item)
+    {
+        Close();
+        _deleting = item;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_deleting is null) return;
+
+        await RunAsync(async () =>
+        {
+            await Api.SaveAsync("DELETE", ItemPath(Id(_deleting)));
+            Close();
+            _notice = "Запись удалена.";
+            _items = await Api.GetAsync<List<TItem>>(ListPath ?? ResourcePath);
+            await Changed.InvokeAsync();
+        });
+    }
+
+    private void Close()
+    {
+        _selected = _editing = _deleting = null;
+        _error = _notice = null;
+    }
+
+    private string ItemPath(Guid id) => $"{ResourcePath}/{id}";
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
