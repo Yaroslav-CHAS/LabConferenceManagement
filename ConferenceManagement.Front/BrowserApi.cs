@@ -1,9 +1,10 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 
 namespace ConferenceManagement.Front;
 
-public sealed class BrowserApi(IJSRuntime js)
+public sealed class BrowserApi(IJSRuntime js, ILogger<BrowserApi> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     public SessionInfo Session { get; private set; } = new();
@@ -24,7 +25,22 @@ public sealed class BrowserApi(IJSRuntime js)
     private async Task<string> SendAsync(string method, string path, object? data = null)
     {
         var body = data is null ? null : JsonSerializer.Serialize(data, JsonOptions);
-        var reply = await js.InvokeAsync<ApiReply>("conferenceApi.send", method, path, body, Session.CsrfToken);
+        ApiReply reply;
+        try
+        {
+            reply = await js.InvokeAsync<ApiReply>("conferenceApi.send", method, path, body, Session.CsrfToken);
+        }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogWarning(ex, "Browser request canceled: {Method} {Path}", method, path);
+            throw new ApiException(ConnectionFailureMessage(method, "Не удалось дождаться ответа сервера."), ex);
+        }
+        catch (JSDisconnectedException ex)
+        {
+            logger.LogDebug(ex, "Browser disconnected during {Method} {Path}", method, path);
+            throw new ApiException(ConnectionFailureMessage(method, "Связь с браузером прервалась."), ex);
+        }
+
         if (reply.Status is >= 200 and < 300)
         {
             return reply.Body;
@@ -48,7 +64,7 @@ public sealed class BrowserApi(IJSRuntime js)
         var message = $"Запрос завершился ошибкой ({reply.Status}).";
         if (reply.Status == 0)
         {
-            message = "Связь с сервером прервалась.";
+            message = ConnectionFailureMessage(method, "Связь с сервером прервалась.");
         }
         else if (reply.Status == 404)
         {
@@ -85,10 +101,15 @@ public sealed class BrowserApi(IJSRuntime js)
         throw new ApiException(message);
     }
 
+    private static string ConnectionFailureMessage(string method, string reason) =>
+        method == "GET"
+            ? $"{reason} Повторите запрос или обновите страницу."
+            : $"{reason} Проверьте результат операции перед повтором.";
+
     private sealed record ApiReply(int Status, string Body, string ContentType);
 }
 
 public sealed record SessionInfo(string? Login = null, bool IsOrganizer = false,
     Guid? PersonId = null, bool CanSetUp = false, string? CsrfToken = null);
 
-public sealed class ApiException(string message) : Exception(message);
+public sealed class ApiException(string message, Exception? innerException = null) : Exception(message, innerException);
